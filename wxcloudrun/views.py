@@ -1,10 +1,11 @@
 from datetime import datetime
-from flask import render_template, request
+from flask import render_template, request, jsonify, make_response
 from run import app
 from wxcloudrun.dao import delete_counterbyid, query_counterbyid, insert_counter, update_counterbyid
 from wxcloudrun.model import Counters
 from wxcloudrun.response import make_succ_empty_response, make_succ_response, make_err_response
-
+from crawler import crawl_school_news
+from contentCrawler import parse_detail_page
 
 @app.route('/')
 def index():
@@ -64,3 +65,34 @@ def get_count():
     """
     counter = Counters.query.filter(Counters.id == 1).first()
     return make_succ_response(0) if counter is None else make_succ_response(counter.count)
+
+
+@app.route('/api/news')
+def get_news():
+    target_url = request.args.get('url')
+    max_page = int(request.args.get('max_page', 3))
+    keywords = request.args.getlist('keywords') or [""]  # 默认为空字符串
+    max_items = int(request.args.get('max_items', 30))
+    start_time_str = request.args.get('start_time')
+    end_time_str = request.args.get('end_time')
+
+    start_time = datetime.fromisoformat(start_time_str) if start_time_str else None
+    end_time = datetime.fromisoformat(end_time_str) if end_time_str else None
+
+    if not target_url:
+        return jsonify({'error': 'URL parameter is required'}), 400
+
+    result = crawl_school_news(target_url, max_page, keywords, max_items, start_time, end_time)
+    response = make_response(jsonify(result))
+    response.headers['Content-Type'] = 'application/json; charset=utf-8'
+    return response
+
+@app.route('/api/detail')
+def get_detail():
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'error': 'URL parameter is required'}), 400
+    result = parse_detail_page(url)
+    response = make_response(jsonify(result))
+    response.headers['Content-Type'] = 'application/json; charset=utf-8'
+    return response
